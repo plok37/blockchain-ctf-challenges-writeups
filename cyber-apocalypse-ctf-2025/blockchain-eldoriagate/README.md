@@ -262,9 +262,64 @@ contract EldoriaGateKernel {
 
 Looking into this contract, there are three function and one modifier, two state changing function and one view function. We can ignore the view function as it doesn't change the state variable of the `kernel` instance. The modifier `onlyFrontend` are applied on the two state changing function which only limit the caller to `EldoriaGate` contract only as it is the one who deploy the `EldoriaGateKernel` contract. It means that we can't call these two state changing function directly, we can only invoke them through the functions in the `EldoriaGate` contract.
 
-Looking into the first state changing function, `authenticate()`, we can find that it first comparing whether the input parameter, `_passphrase` are equal to `secret` which is `eldoriaSecret` as the value its stored is retrieved from the slot of `eldoriaSecret`, and the compare result will be stored in `auth`. After that, in order to find out the location of mapping's value stored in storage, the method is to hash the key with the slot of mapping using keccak256. In this case, it first store the key which is the input parameter `_unknown` in the location `0x00`, follow by storing the slot of `villagers` which is the slot of mapping in the location of `0x20`. The reason of storing in `0x00` and `0x20` is to keep it with a length of bytes32. The next step is hashing, `keccak256(0x00, 0x40)`, this performs a keccak256 hashing starting from the location of `0x00` until a position of `0x40` which is 64 bytes in order to includes all the value of `_unknown` and slot of villagers, and the result will be stored at `villagerSlot`. Afterwards, it use `sload()` function to load the next slot's value of `villagerSlot`. In order to understand the reason of loading the next slot's value instead of just the value in the slot of `villagerSlot`, we need to first understand how struct are being stored in maapings. After finding the position of the key (Struct) are being stored, we need to look into the type of variable defined in the struct in order to understand how they are being stored. Taking this case as example, the `Villager` struct first defines a `uint` type (`id`), follow by a `bool` type (`authenticated`), and then follow by a `uint8` type (`roles`). When storing a `uint`, a length of 32 bytes will be needed which fill up a entire slot in storage. When storing a `bool` and `uint8` type, it only take up to 1 byte. Thus, the value of `villagerSlot` is the `uint` type, which is the `id` defined in the `Villager` struct. The next slot would store the value of `authenticated` and `roles` as they only take up to 2 bytes in total and the left will be padded with `0` for the remaining 30 bytes. This is the reason that why they save it as `packed` also as it packs the value of `authenticated` and `roles`. The next step, they use `and(packed, not(0xff))` to clear the lowest bytes of `packed` and use `or(and(packed, not(0xff)), auth)` to set the lowest bytes to `auth`, which means that replacing the lowest byte of `packed` with `auth`, while keeping the rest of the bytes. In summary, as long as the input parameters are equal to `eldoriaSecret`, you will be authenticated which fulfill the first condition to be the usurper.
+```solidity
+let secret := sload(eldoriaSecret.slot)            
+auth := eq(shr(224, _passphrase), secret)
+mstore(0x80, auth)
+```
 
-Well, let's find how the second condition are being fulfilled. Looking into the `evaluateIdentity()` function, it did the same thing as `authenticate()` which is finding the storage location of `Villager` with the `_unknown` key. Afterward, it stored `_unknown` in the memory with a location of `0x00` for hashing purpose onwards and store it in the `villagerSlot` as the `id` defined in the `Villager` struct. Afterwards, it takes the next slot's value of `villagerSlot` which is the packed value of `authenticated` and `roles` and stored it in `storedPacked`. It then used `and(storedPacked, 0xff)` to masks everything except the lowest byte and stored it in `storedAuth`. Afterwards, it `ROLE_SERF` in `defaultRolesMask` and the value of it is `1` as `ROLE_SERF  = 1 << 0`, it uses bitwise left shifts (1 << n):
+Looking into the first state changing function, `authenticate()`, we can find that it first comparing whether the input parameter, `_passphrase` are equal to `secret` which is `eldoriaSecret` as the value its stored is retrieved from the slot of `eldoriaSecret`, and the compare result will be stored in `auth`. 
+
+```solidity
+mstore(0x00, _unknown)
+mstore(0x20, villagers.slot)
+let villagerSlot := keccak256(0x00, 0x40)
+```
+
+After that, in order to find out the location of mapping's value stored in storage, the method is to hash the key with the slot of mapping using keccak256. In this case, it first store the key which is the input parameter `_unknown` in the location `0x00`, follow by storing the slot of `villagers` which is the slot of mapping in the location of `0x20`. The reason of storing in `0x00` and `0x20` is to keep it with a length of bytes32. The next step is hashing, `keccak256(0x00, 0x40)`, this performs a keccak256 hashing starting from the location of `0x00` until a position of `0x40` which is 64 bytes in order to includes all the value of `_unknown` and slot of `Villager`, and the result will be stored at `villagerSlot`. 
+
+```solidity
+let packed := sload(add(villagerSlot, 1))
+auth := mload(0x80)
+let newPacked := or(and(packed, not(0xff)), auth)
+sstore(add(villagerSlot, 1), newPacked)
+```
+
+Afterwards, it use `sload()` function to load the next slot's value of `villagerSlot`. In order to understand the reason of loading the next slot's value instead of just the value in the slot of `villagerSlot`, we need to first understand how struct are being stored in maapings. After finding the position of the key (Struct) are being stored, we need to look into the type of variable defined in the struct in order to understand how they are being stored. Taking this case as example, the `Villager` struct first defines a `uint` type (`id`), follow by a `bool` type (`authenticated`), and then follow by a `uint8` type (`roles`). When storing a `uint`, a length of 32 bytes will be needed which fill up a entire slot in storage. When storing a `bool` and `uint8` type, it only take up to 1 byte. Thus, the value of `villagerSlot` is the `uint` type, which is the `id` defined in the `Villager` struct. The next slot would store the value of `authenticated` and `roles` as they only take up to 2 bytes in total and the left will be padded with `0` for the remaining 30 bytes. This is the reason that why they save it as `packed` also as it packs the value of `authenticated` and `roles`. 
+
+The next step, they use `and(packed, not(0xff))` to clear the lowest bytes of `packed` and use `or(and(packed, not(0xff)), auth)` to set the lowest bytes to `auth`, which means that replacing the lowest byte of `packed` with `auth`, while keeping the rest of the bytes. In summary, as long as the input parameters are equal to `eldoriaSecret`, you will be authenticated which fulfill the first condition to be the usurper.
+
+```solidity
+mstore(0x00, _unknown)
+mstore(0x20, villagers.slot)
+let villagerSlot := keccak256(0x00, 0x40)
+```
+
+Well, let's find how the second condition are being fulfilled. Looking into the `evaluateIdentity()` function, it did the same thing as `authenticate()` which is finding the storage location of `Villager` with the `_unknown` key. 
+
+```solidity
+mstore(0x00, _unknown)
+id := keccak256(0x00, 0x20)
+sstore(villagerSlot, id)
+```
+
+Afterward, it stored `_unknown` in the memory with a location of `0x00` for hashing purpose onwards and store it in the `villagerSlot` as the `id` defined in the `Villager` struct. 
+
+```solidity
+let storedPacked := sload(add(villagerSlot, 1))
+let storedAuth := and(storedPacked, 0xff)
+if iszero(storedAuth) { revert(0, 0) }
+```
+
+In the next step, it takes the next slot's value of `villagerSlot` which is the packed value of `authenticated` and `roles` and stored it in `storedPacked`. It then used `and(storedPacked, 0xff)` to masks everything except the lowest byte and stored it in `storedAuth`. 
+
+```solidity
+let defaultRolesMask := ROLE_SERF
+roles := add(defaultRolesMask, _contribution)
+if lt(roles, defaultRolesMask) { revert(0, 0) }
+```
+
+Then, it save the value of `ROLE_SERF` in `defaultRolesMask` and the value of it is `1` because `ROLE_SERF  = 1 << 0`. It uses bitwise left shifts (1 << n):
 
 ```
 ROLE_SERF = 1 << 0 = 00000001 (binary) = 1 (decimal)
@@ -277,7 +332,14 @@ ROLE_EARL = 1 << 6 = 01000000 (binary) = 64 (decimal)
 ROLE_DUKE = 1 << 7 = 10000000 (binary) = 128 (decimal)
 ```
 
-Afterwards, we can find that the value of `roles` will be the sum of `defaultRolesMask` and the input parameters, `_contribution`. It then use `shl(8, roles)` to shift the bits to the left by 8 bits which is 1 byte, for example: `0x02` to `0x0200`, so the `roles` lands at byte 1 instead of byte 0. It also then use `or(storedAuth, shl(8, roles)` to combine the result of `authenticated` and then store it back to the next slot of `villagerSlot` for updating the value. From here, we've found how the value of roles are being calculated and updated. Well, let's find out how to let the value of roles become `0` to meet out goal, we can find that `roles` are defined with a type of `uint8` and the way of calculating `roles` is just simply add on the `defaultRolesMask` and `_contribution`. Thus, in order to make the value of `roles` to be `0`, we can just simply make it overflow as in Yul, overflow and underflow are not being checked as default.
+```solidity
+let packed := or(storedAuth, shl(8, roles))
+sstore(add(villagerSlot, 1), packed)
+```
+
+As we know the value of `roles` will be the sum of `defaultRolesMask` and the input parameters, `_contribution`. It then use `shl(8, roles)` to shift the bits to the left by 8 bits which is 1 byte, for example: `0x02` to `0x0200`, so the `roles` lands at byte 1 instead of byte 0. It also then use `or(storedAuth, shl(8, roles)` to combine the result of `authenticated` and then store it back to the next slot of `villagerSlot` for updating the value. 
+
+From here, we've found how the value of roles are being calculated and updated. Well, let's find out how to let the value of roles become `0` to meet out goal, we can find that `roles` are defined with a type of `uint8` and the way of calculating `roles` is just simply add on the `defaultRolesMask` and `_contribution`. Thus, in order to make the value of `roles` to be `0`, we can just simply make it overflow as in Yul, overflow and underflow are not being checked as default.
 
 ```md
 🔑 Key Observations
