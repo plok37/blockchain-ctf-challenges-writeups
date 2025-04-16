@@ -26,7 +26,7 @@
 
 ### `Setup.sol`
 
-```
+```solidity
 pragma solidity ^0.8.28;
 
 import { HeliosDEX } from "./HeliosDEX.sol";
@@ -57,7 +57,7 @@ According to the `Setup.sol` contract, the main goal is to receive more than 20 
 
 ### `HeliosDEX.sol`
 
-```
+```solidity
 pragma solidity ^0.8.28;
 
 /***
@@ -219,7 +219,7 @@ Rememeber that our main goal is to receive more than 20 ETH, so let's directly f
 
 Looking into other main functions of `HeliosDEX` contract, there are three swapping function, the only place that we can receive ERC20 tokens. Each swap function corresponding to swap for each created ERC20 token (`ELD`, `MAL`, `HLS`) by just using ETH for swapping. In those swapping function, there are only two things are different, one is exchanging ratio which doesn't matter in any way, another is the method of calculating the gross of the exchanging token which attually matters in this case. 
 
-```
+```solidity
 uint256 grossELD = Math.mulDiv(msg.value, exchangeRatioELD, 1e18, Math.Rounding(0));
 uint256 grossMal = Math.mulDiv(msg.value, exchangeRatioMAL, 1e18, Math.Rounding(1));
 uint256 grossHLS = Math.mulDiv(msg.value, exchangeRatioHLS, 1e18, Math.Rounding(3));
@@ -227,7 +227,7 @@ uint256 grossHLS = Math.mulDiv(msg.value, exchangeRatioHLS, 1e18, Math.Rounding(
 
 The only thing diffence between them is the fourth input parameter of the `mulDiv()` function. Let's find out why it matters!
 
-```
+```solidity
 function mulDiv(uint256 x, uint256 y, uint256 denominator, Rounding rounding) internal pure returns (uint256) {
         return mulDiv(x, y, denominator) + SafeCast.toUint(unsignedRoundsUp(rounding) && mulmod(x, y, denominator) > 0);
 }
@@ -235,7 +235,7 @@ function mulDiv(uint256 x, uint256 y, uint256 denominator, Rounding rounding) in
 
 The calculations of the gross of each ERC20 token is based on the output of the `mulDiv()` function from the `Math` library as shown in the above ccode snipet. We can see that it return a value from the `mulDiv()` that only with three input parameters  and add up with another value that return from the `toUint()` function which cames from the `SafeCast` library.
 
-```
+```solidity
 function toUint(bool b) internal pure returns (uint256 u) {
     assembly ("memory-safe") {
         u := iszero(iszero(b))
@@ -245,7 +245,7 @@ function toUint(bool b) internal pure returns (uint256 u) {
 
 Looking into the `toUint()` function, we can know that it will return `1` if the input parameter `b` is `true`. Looking back to the `mulDiv()` function with four parameters, we can find that the input parameters of `toUint()` is this `(unsignedRoundsUp(rounding) && mulmod(x, y, denominator) > 0)`. Thus, if this input parameter is `true` then the gross value will be certain value + 1. It also means that we always get atleast one ERC20 token. Well, let's look back to the input parameter of `toUint()`, it will only be true when the `unsignedRoundsUp(rounding)` and `mulmod(x, y, denominator) > 0` return `true`. In this case, as long as we don't put weird number when calling the swaping functions, the value of `mulmod(x, y, denominator) > 0` will always be true. Then, the remaining condition to let `toUint()` to return `true` is `unsignedRoundsUp(rounding)`.
 
-```
+```solidity
 function unsignedRoundsUp(Rounding rounding) internal pure returns (bool) {
     return uint8(rounding) % 2 == 1;
 }
@@ -272,7 +272,7 @@ Thus, the is the vulnerability of the swap functions. Even the value is 0, we st
 
 Since that we know there are two swapping function that will always give us atleast one coresponding ERC20 token even we only sending `1` wei for swapping, we can just keep calling the swapping function to get enough tokens for refunding and get more than 20 ether.
 
-```
+```solidity
 uint256 amount = 85;
 for(uint256 i = 0; i< amount; i++){
     heliosDex.swapForHLS{value: 1}();

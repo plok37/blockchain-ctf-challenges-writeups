@@ -25,7 +25,8 @@
 ## Objective
 
 ### `Setup.sol`
-```
+
+```solidity
 pragma solidity ^0.8.28;
 
 import { Eldorion } from "./Eldorion.sol";
@@ -54,7 +55,7 @@ The main goal is to defeat Elldorion in order to obtain the flag as we can obser
 
 ### `Eldorion.sol`
 
-```
+```solidity
 pragma solidity ^0.8.28;
 
 contract Eldorion {
@@ -111,7 +112,7 @@ Since the `eternalResilience()` modifier compares block.timestamp with the lastA
 
 There are two methods, one is deploying a malicious contract and call the functions to do batch executions, another is just writing a script to do batch executions. The difference between them is one is the malicious contract as the msg.sender, another is the private key given in the command to run the script will act as the msg.sender.
 
-```
+```solidity
 function run() public  {
     vm.startBroadcast();
     for(uint256 i = 0; i < 3; i++) {

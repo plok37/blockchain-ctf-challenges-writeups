@@ -27,7 +27,7 @@
 
 ### `Setup.sol`
 
-```
+```solidity
 pragma solidity ^0.8.28;
 
 import { EldoriaGate } from "./EldoriaGate.sol";
@@ -58,7 +58,7 @@ Based on the `Setup.sol` file, we need to become the usurper in order to get the
 
 ### `EldoriaGate.sol`
 
-```
+```solidity
 pragma solidity ^0.8.28;
 
 /***
@@ -169,7 +169,7 @@ Let's proceed to another function, `enter()`, this function looks interesting as
 
 ### `EldoriaGateKernel.sol`
 
-```
+```solidity
 pragma solidity ^0.8.28;
 
 contract EldoriaGateKernel {
@@ -292,7 +292,7 @@ Afterwards, we can find that the value of `roles` will be the sum of `defaultRol
 
 According to the above analysis, there are two condition that we need to achieve in order to be the usurper. The first is being authenticated and the second is have zero roles.
 
-```
+```solidity
 function run() public returns (bool) {
     eldoriaGate.enter{value: 255}(0xdeadfade);
     return setup.isSolved();
