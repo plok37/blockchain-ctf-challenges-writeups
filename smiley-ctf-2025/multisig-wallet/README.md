@@ -4,10 +4,6 @@
 - **CTF Event:** Smiley CTF 2025
 - **Difficulty:** Medium
 
----
-
-## Challenge Description
-
 > This multisig wallet lets the owners distribute a shared fund of tokens. Distribute all the tokens in the wallet without the controllers' permission.
 
 ---
