@@ -149,7 +149,15 @@ contract Locker {
 }
 ```
 
-The Locker contract implements a multisig wallet mechanism. It is initialized with a set of controller addresses, a threshold for the number of required signatures, and a single token to be distributed. The contract enforces that only a transaction signed by the required number of unique controllers can trigger the distribute() function, which decrements the token count. `validateMultiSig()` checks if the signer has signed before, `_isValidSignature()` checks if the recover address is one of the controllers and also checks if the signature has been used before.
+The Locker contract implements a multisig wallet mechanism. It is initialized with a set of controller addresses, a threshold for the number of required signatures, and a single token to be distributed. Furthermore, in the constructor, it set define the value of `msgHash` (will be used later on when recovering signer's addresses) by using Yul, it first stored `"\x19Ethereum Signed Message:\n32"` in slot `0x00` of memory, this is a prefix before the message, which follow ERC-191, Signed Data Standard. There are three version of it, version `0x00`, `0x01`, and `0x45`. In this case, it is using version `0x45`, which is the hex representation of `E`. The format of version `0x45` is:
+
+```
+0x19 <0x45 (E)> <thereum Signed Message:\n" + len(message)> <data to sign>
+```
+
+Based on the format, you will then understand why this `"\x19Ethereum Signed Message:\n32"` is being stored and will take up to 28 bytes, the `32` is stands for 32 bytes of message to sign, which is the `_lockId` stored in slot `0x1C` (slot `28`). Since the prefix takes up to 28 bytes and the message to sign take up to 32 bytes, which is a total of 60 bytes (`0x3c` in hex), it then used `keccak256(0x00, 0x3c)` for hashing both the prefix and message to sign. If you are curious for other format, you may read the ERC-191 at [here](https://eips.ethereum.org/EIPS/eip-191).
+
+The contract enforces that only a transaction signed by the required number of unique controllers can trigger the `distribute()` function, which decrements the token count. `validateMultiSig()` checks if the signer has signed before, `_isValidSignature()` checks if the recover address is one of the controllers and also checks if the signature has been used before.
 
 
 ### `Locker.sol`, `SetupLocker` contract
